@@ -59,7 +59,7 @@ export default function AppLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-slate-50/70 text-slate-800 flex selection:bg-indigo-500 selection:text-white">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col lg:ml-64 min-w-0">
         <Navbar onMenuClick={() => setSidebarOpen(true)} pageTitle={title} />

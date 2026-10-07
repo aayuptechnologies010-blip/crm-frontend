@@ -20,6 +20,7 @@ import Pipeline from './pages/Pipeline';
 import Calendar from './pages/Calendar';
 import Invoices from './pages/Invoices';
 import InvoiceDetail from './pages/InvoiceDetail';
+import RolesPermissions from './pages/RolesPermissions';
 
 function ProtectedRoute({ children }) {
   const { currentUser } = useAuth();
@@ -155,6 +156,7 @@ export default function App() {
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/invoices" element={<Invoices />} />
           <Route path="/invoices/:id" element={<InvoiceDetail />} />
+          <Route path="/roles" element={<RolesPermissions />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />
         </Route>

@@ -1,290 +1,256 @@
 import { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { TrendingUp, Users, UserPlus, UserCheck, Target, ArrowUpRight, Clock, Bell, Zap } from 'lucide-react';
+import { 
+  Users, UserPlus, UserCheck, TrendingUp, Clock, AlertTriangle, 
+  Calendar, FileText, CheckCircle2, XCircle, ArrowUpRight, 
+  Building2, Award, Zap, Bell, Shield, ChevronRight
+} from 'lucide-react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import Card from '../components/shared/Card';
 import StatusBadge from '../components/shared/StatusBadge';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
 import { requestNotificationPermission } from '../utils/firebase';
+import { useNavigate } from 'react-router-dom';
 
-const COLORS = ['#E5E7EB', '#DBEAFE', '#3B82F6', '#93C5FD', '#60A5FA', '#1D4ED8'];
+const STAGE_COLORS = ['#3B82F6', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#6366F1', '#14B8A6', '#64748B'];
 
 export default function Dashboard() {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const isSalesExec = currentUser?.role === 'Sales Executive';
+  const isAdmin = currentUser?.role === 'Super Admin' || currentUser?.role === 'Admin';
 
   const [stats, setStats] = useState(null);
-  const [revenueData, setRevenueData] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // FCM Status
   const [fcmStatus, setFcmStatus] = useState(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      return Notification.permission;
-    }
+    if (typeof window !== 'undefined' && 'Notification' in window) return Notification.permission;
     return 'default';
   });
   const [fcmTestSent, setFcmTestSent] = useState(false);
 
   useEffect(() => {
-    api.get('/dashboard').then(data => setStats(data)).catch(() => {});
-
-    // Revenue: last 6 months — for sales exec only their assigned Won leads
-    const revenueUrl = isSalesExec
-      ? `/leads?status=Won&assignedTo=${encodeURIComponent(currentUser.name)}&limit=1000`
-      : '/leads?status=Won&limit=1000';
-
-    api.get(revenueUrl).then(data => {
-      const allLeads = data.leads || [];
-      const months = [];
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date();
-        d.setMonth(d.getMonth() - i);
-        const label = d.toLocaleString('default', { month: 'short' });
-        const y = d.getFullYear();
-        const m = d.getMonth();
-        const revenue = allLeads
-          .filter(l => {
-            if (!l.createdAt) return false;
-            const ld = new Date(l.createdAt);
-            return ld.getFullYear() === y && ld.getMonth() === m;
-          })
-          .reduce((sum, l) => sum + (parseFloat(String(l.value).replace(/,/g, '')) || 0), 0);
-        months.push({ month: label, revenue });
-      }
-      setRevenueData(months);
-    }).catch(() => {});
+    api.get('/dashboard')
+      .then(data => {
+        setStats(data);
+      })
+      .catch(err => console.error('Error fetching dashboard:', err))
+      .finally(() => setLoading(false));
   }, []);
 
   const triggerTestNotification = async () => {
-    if (!('Notification' in window)) {
-      alert('Browser notifications support nahi karta.');
-      return;
-    }
+    if (!('Notification' in window)) return alert('Notifications not supported');
     if (Notification.permission !== 'granted') {
-      const token = await requestNotificationPermission();
+      await requestNotificationPermission();
       setFcmStatus(Notification.permission);
     }
     if (Notification.permission === 'granted') {
       try {
-        if ('serviceWorker' in navigator) {
-          const reg = await navigator.serviceWorker.ready;
-          if (reg && reg.showNotification) {
-            await reg.showNotification('🔥 Sales CRM Live Notification', {
-              body: `Hello ${currentUser?.name || 'User'}! FCM Live Push Notification is working successfully on this PWA / device.`,
-              icon: '/logo.png',
-              badge: '/logo.png',
-              vibrate: [200, 100, 200],
-              tag: 'test-fcm-push',
-              renotify: true
-            });
-            setFcmTestSent(true);
-            setTimeout(() => setFcmTestSent(false), 3000);
-            return;
-          }
-        }
         new Notification('🔥 Sales CRM Live Notification', {
-          body: `Hello ${currentUser?.name || 'User'}! FCM Live Push Notification is working successfully on this device.`,
-          icon: '/logo.png',
-          badge: '/logo.png'
+          body: `Hello ${currentUser?.name || 'User'}! Follow-up reminder active.`,
+          icon: '/logo.png'
         });
         setFcmTestSent(true);
         setTimeout(() => setFcmTestSent(false), 3000);
       } catch (err) {
-        console.error('Test notification failed:', err);
+        console.error(err);
       }
-    } else {
-      alert('Notification permission allow nahi hai. Browser/PWA App Settings me Notification Allow karein.');
     }
   };
 
-  if (!stats) {
+  if (loading || !stats) {
     return (
-      <div className="flex items-center justify-center h-48 text-gray-400 text-sm">
-        Loading dashboard...
+      <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
+        Loading analytics dashboard...
       </div>
     );
   }
 
-  const { kpis, leadsByStatus, todayFollowUps, recentActivities, teamPerformance } = stats;
+  const { kpis, stageWiseCounts, todayFollowUps, recentTimelineActivities, executivePerformance, branchPerformance } = stats;
 
-  const leadStatusChart = (leadsByStatus || []).map(s => ({ name: s._id, value: s.count }));
-
-  const kpiCards = [
-    { label: 'Total Leads', value: kpis?.totalLeads ?? 0, icon: Users, color: 'bg-blue-50 text-blue-500' },
-    { label: 'New Today', value: kpis?.newToday ?? 0, icon: UserPlus, color: 'bg-gray-100 text-gray-500' },
-    ...(!isSalesExec ? [{ label: 'Assigned', value: kpis?.assigned ?? 0, icon: UserCheck, color: 'bg-blue-50 text-blue-500' }] : []),
-    { label: 'Converted', value: kpis?.converted ?? 0, icon: Target, color: 'bg-blue-100 text-blue-600' },
-    { label: 'Conversion Rate', value: kpis?.totalLeads > 0 ? `${Math.round((kpis.converted / kpis.totalLeads) * 100)}%` : '0%', icon: TrendingUp, color: 'bg-blue-50 text-blue-500' },
+  // Primary KPIs defined in PDF Section 12
+  const primaryKpis = [
+    { label: 'Total Leads', value: kpis?.totalLeads ?? 0, icon: Users, color: 'bg-emerald-50 text-emerald-700', link: '/leads' },
+    { label: 'New Leads', value: kpis?.newLeads ?? 0, icon: UserPlus, color: 'bg-slate-100 text-slate-700', link: '/leads?status=New Lead' },
+    { label: 'Unassigned', value: kpis?.unassignedLeads ?? 0, icon: UserCheck, color: 'bg-amber-50 text-amber-700', link: '/assign' },
+    { label: 'Overdue Follow-ups', value: kpis?.overdueFollowUps ?? 0, icon: AlertTriangle, color: 'bg-rose-50 text-rose-700', isAlert: true, link: '/followups' },
+    { label: "Today's Follow-ups", value: kpis?.todayFollowUps ?? 0, icon: Clock, color: 'bg-emerald-100 text-emerald-800', link: '/followups' },
   ];
+
+  // Pipeline Flow KPIs
+  const pipelineKpis = [
+    { label: 'Meetings / Demos', value: kpis?.meetingsScheduled ?? 0, icon: Calendar, color: 'text-emerald-700' },
+    { label: 'Quotations Sent', value: kpis?.quotationsSent ?? 0, icon: FileText, color: 'text-emerald-600' },
+    { label: 'Negotiations', value: kpis?.negotiations ?? 0, icon: TrendingUp, color: 'text-amber-700' },
+    { label: 'Won Deals', value: kpis?.wonDeals ?? 0, icon: CheckCircle2, color: 'text-emerald-700' },
+    { label: 'Lost / Dropped', value: kpis?.lostLeads ?? 0, icon: XCircle, color: 'text-slate-500' },
+    { label: 'Conversion Rate', value: `${kpis?.conversionRate ?? 0}%`, icon: Award, color: 'text-emerald-700' },
+  ];
+
+  const stageChartData = (stageWiseCounts || []).map(s => ({
+    name: s._id || 'Unspecified',
+    count: s.count
+  }));
 
   return (
     <div className="space-y-6">
-      {/* ── FCM Live Notification Banner on Dashboard (Super Admin & Admin Only) ── */}
-      {(currentUser?.role === 'Super Admin' || currentUser?.role === 'Admin') && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl text-white shadow-md">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center text-white">
-              <Bell size={20} />
-            </div>
-            <div>
-              <h4 className="font-bold text-sm flex items-center gap-2">
-                FCM Live Push Notification (Admin Test)
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                  fcmStatus === 'granted' ? 'bg-green-400 text-green-950' : 'bg-amber-300 text-amber-950'
-                }`}>
-                  {fcmStatus === 'granted' ? 'Active' : fcmStatus}
-                </span>
-              </h4>
-              <p className="text-xs text-blue-100">Live test notification direct device pe bhej kar check karein</p>
-            </div>
-          </div>
+      {/* ── FCM Live Banner for Admins ── */}
+      
 
-          <button
-            type="button"
-            onClick={triggerTestNotification}
-            className="px-4 py-2 bg-white hover:bg-gray-100 active:bg-gray-200 text-blue-600 rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 self-stretch sm:self-auto justify-center"
-          >
-            <Zap size={14} className="text-amber-500 fill-amber-500" />
-            {fcmTestSent ? 'Notification Sent! ✓' : 'Send Test Push Notification'}
-          </button>
-        </div>
-      )}
-
+      {/* ── 1. PRIMARY METRICS BAR (PDF Section 12) ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        {kpiCards.map(({ label, value, icon: Icon, color }) => (
-          <Card key={label} className="p-5">
-            <div className="flex items-start justify-between mb-3">
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${color}`}>
-                <Icon size={18} />
+        {primaryKpis.map((kpi) => {
+          const Icon = kpi.icon;
+          return (
+            <Card 
+              key={kpi.label} 
+              onClick={() => kpi.link && navigate(kpi.link)}
+              className="p-5 cursor-pointer hover:shadow-md transition-all group"
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${kpi.color}`}>
+                  <Icon size={20} />
+                </div>
+                <span className="text-gray-400 group-hover:text-blue-600 transition-colors">
+                  <ArrowUpRight size={16} />
+                </span>
               </div>
-              <span className="flex items-center gap-0.5 text-xs text-blue-500 font-medium">
-                <ArrowUpRight size={12} />
-              </span>
-            </div>
-            <p className="text-2xl font-bold text-gray-800">{value}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{label}</p>
-          </Card>
-        ))}
+              <p className={`text-2xl font-bold ${kpi.isAlert && kpi.value > 0 ? 'text-rose-600' : 'text-gray-900'}`}>
+                {kpi.value}
+              </p>
+              <p className="text-xs text-gray-500 mt-1 font-medium">{kpi.label}</p>
+            </Card>
+          );
+        })}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-semibold text-gray-800">Revenue Overview</h3>
-              <p className="text-xs text-gray-400 mt-0.5">Monthly revenue trend (Won leads)</p>
-            </div>
-            <span className="text-xs bg-blue-50 text-blue-600 px-2.5 py-1 rounded-lg font-medium">Last 6 months</span>
-          </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={revenueData}>
-              <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={v => `₹${v / 1000}k`} />
-              <Tooltip formatter={v => [`₹${v.toLocaleString()}`, 'Revenue']} contentStyle={{ borderRadius: '12px', border: '1px solid #E5E7EB', fontSize: 12 }} />
-              <Line type="monotone" dataKey="revenue" stroke="#3B82F6" strokeWidth={2.5} dot={{ fill: '#3B82F6', r: 4 }} activeDot={{ r: 6 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </Card>
-
-        <Card className="p-5">
-          <div className="mb-4">
-            <h3 className="font-semibold text-gray-800">Lead Status</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Distribution by status</p>
-          </div>
-          <ResponsiveContainer width="100%" height={160}>
-            <PieChart>
-              <Pie data={leadStatusChart} cx="50%" cy="50%" innerRadius={45} outerRadius={70} dataKey="value" paddingAngle={3}>
-                {leadStatusChart.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-              </Pie>
-              <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #E5E7EB', fontSize: 12 }} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="grid grid-cols-2 gap-1.5 mt-2">
-            {leadStatusChart.map((item, i) => (
-              <div key={item.name} className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                <span className="text-xs text-gray-600">{item.name} ({item.value})</span>
+      {/* ── 2. PIPELINE CONVERSION FLOW KPIs ── */}
+      <Card className="p-5">
+        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Pipeline Velocity & Conversion Flow</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          {pipelineKpis.map(pk => {
+            const Icon = pk.icon;
+            return (
+              <div key={pk.label} className="bg-gray-50 p-3.5 rounded-xl border border-gray-100">
+                <div className="flex items-center gap-2 mb-1">
+                  <Icon size={16} className={pk.color} />
+                  <span className="text-xs font-semibold text-gray-500 truncate">{pk.label}</span>
+                </div>
+                <p className="text-xl font-bold text-gray-900">{pk.value}</p>
               </div>
-            ))}
+            );
+          })}
+        </div>
+      </Card>
+
+      {/* ── 3. CHARTS ROW: STAGE-WISE DISTRIBUTION & EXECUTIVE PERFORMANCE ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Stage-wise Lead Count (PDF Section 12) */}
+        <Card className="p-5 lg:col-span-1">
+          <h3 className="text-sm font-bold text-gray-800 mb-1">Stage-wise Lead Breakdown</h3>
+          <p className="text-xs text-gray-400 mb-4">Volume across all active workflow stages</p>
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            {stageChartData.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-8">No leads found</p>
+            ) : (
+              stageChartData.map((stg, i) => (
+                <div key={stg.name} className="flex items-center justify-between p-2 rounded-lg bg-gray-50 text-xs">
+                  <span className="font-medium text-gray-700 truncate">{stg.name}</span>
+                  <span className="font-bold bg-white px-2 py-0.5 rounded border border-gray-200 text-gray-900">{stg.count}</span>
+                </div>
+              ))
+            )}
           </div>
         </Card>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Executive-wise Performance (PDF Section 12) */}
         {!isSalesExec && (
-          <Card className="lg:col-span-2 p-5">
-            <div className="mb-4">
-              <h3 className="font-semibold text-gray-800">Team Performance</h3>
-              <p className="text-xs text-gray-400 mt-0.5">Leads vs Conversions</p>
-            </div>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={teamPerformance || []} barGap={4}>
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #E5E7EB', fontSize: 12 }} />
-                <Bar dataKey="leads" fill="#DBEAFE" radius={[6, 6, 0, 0]} name="Leads" />
-                <Bar dataKey="converted" fill="#3B82F6" radius={[6, 6, 0, 0]} name="Converted" />
-              </BarChart>
-            </ResponsiveContainer>
+          <Card className="p-5 lg:col-span-2">
+            <h3 className="text-sm font-bold text-gray-800 mb-1">Executive Performance & Conversion</h3>
+            <p className="text-xs text-gray-400 mb-4">Total assigned vs deals won per sales executive</p>
+            {(!executivePerformance || executivePerformance.length === 0) ? (
+              <p className="text-xs text-gray-400 text-center py-12">No executive performance data available</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={executivePerformance} barGap={6}>
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ borderRadius: '10px', fontSize: 12 }} />
+                  <Bar dataKey="assigned" fill="#cbd5e1" radius={[6, 6, 0, 0]} name="Assigned Leads" />
+                  <Bar dataKey="won" fill="#16a34a" radius={[6, 6, 0, 0]} name="Won Deals" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+        )}
+      </div>
+
+      {/* ── 4. BRANCH PERFORMANCE & TODAY'S FOLLOW-UPS ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Branch-wise Performance (PDF Section 12) */}
+        {isAdmin && (
+          <Card className="p-5">
+            <h3 className="text-sm font-bold text-gray-800 mb-1 flex items-center gap-2">
+              <Building2 size={16} className="text-emerald-700" /> Branch-wise Distribution
+            </h3>
+            <p className="text-xs text-gray-400 mb-4">Leads and closures across company branches</p>
+            {(!branchPerformance || branchPerformance.length === 0) ? (
+              <p className="text-xs text-gray-400 text-center py-8">No branches registered yet</p>
+            ) : (
+              <div className="space-y-3">
+                {branchPerformance.map(bp => (
+                  <div key={bp.branch} className="p-3 bg-gray-50 rounded-xl flex items-center justify-between border border-gray-100">
+                    <div>
+                      <p className="font-bold text-sm text-gray-800">{bp.branch}</p>
+                      <span className="text-xs text-gray-400">Code: {bp.code}</span>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-semibold text-gray-700">{bp.totalLeads} Total Leads</p>
+                      <span className="text-xs font-bold text-emerald-600">{bp.wonDeals} Won</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
         )}
 
+        {/* Today's Follow-ups List */}
         <Card className="p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-800">Today's Follow-ups</h3>
-            <Clock size={16} className="text-gray-400" />
+            <div>
+              <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                <Clock size={16} className="text-amber-500" /> Today's Scheduled Follow-ups
+              </h3>
+              <p className="text-xs text-gray-400">Tasks requiring immediate call / action today</p>
+            </div>
+            <button onClick={() => navigate('/followups')} className="text-xs text-emerald-700 font-semibold hover:underline">
+              View All
+            </button>
           </div>
-          <div className="space-y-3">
-            {(todayFollowUps || []).length === 0 && (
-              <p className="text-sm text-gray-400 text-center py-4">No follow-ups today</p>
+
+          <div className="space-y-2.5">
+            {(!todayFollowUps || todayFollowUps.length === 0) ? (
+              <p className="text-xs text-gray-400 text-center py-8">No follow-ups due today 🎉</p>
+            ) : (
+              todayFollowUps.map(fu => (
+                <div key={fu._id} className="p-3 bg-gray-50 rounded-xl flex items-center justify-between gap-3 border border-gray-100 hover:border-gray-200 transition-all">
+                  <div>
+                    <p className="font-semibold text-xs text-gray-800">{fu.lead}</p>
+                    <p className="text-[11px] text-gray-400">{fu.time} • Assigned to: {fu.assignedTo}</p>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                    fu.priority === 'High' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                  }`}>
+                    {fu.priority}
+                  </span>
+                </div>
+              ))
             )}
-            {(todayFollowUps || []).map(f => (
-              <div key={f._id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl hover:bg-blue-50 transition-colors cursor-pointer">
-                <div className="w-8 h-8 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Clock size={14} className="text-blue-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{f.lead}</p>
-                  <p className="text-xs text-gray-400">{f.time} · {f.assignedTo}</p>
-                </div>
-                <StatusBadge status={f.priority} />
-              </div>
-            ))}
           </div>
         </Card>
       </div>
-
-      <Card className="p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gray-800">Recent Activities</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100">
-                {['User', 'Action', 'Lead', 'Time'].map(h => (
-                  <th key={h} className="text-left px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {(recentActivities || []).slice(0, 8).map(a => (
-                <tr key={a._id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-3 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center text-xs font-bold text-blue-600">
-                        {(a.user || '?').split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <span className="text-gray-700 font-medium">{a.user}</span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 text-gray-600">{a.action}</td>
-                  <td className="px-3 py-3 text-blue-600 font-medium">{a.lead}</td>
-                  <td className="px-3 py-3 text-gray-400 text-xs">{a.time}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
     </div>
   );
 }

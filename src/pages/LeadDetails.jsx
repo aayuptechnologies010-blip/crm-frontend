@@ -302,7 +302,7 @@ export default function LeadDetails() {
             <div>
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h1 className="text-2xl font-bold text-gray-900">{lead.name || lead.contactPerson}</h1>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-100 text-blue-700 border border-blue-200">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
                   {status}
                 </span>
                 <span className={`px-2 py-0.5 rounded-md text-xs font-semibold ${
@@ -341,7 +341,7 @@ export default function LeadDetails() {
               <MessageCircle size={15} /> WhatsApp
             </a>
             <a href={`mailto:${lead.email}`}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-xl text-sm font-semibold transition-all shadow-sm">
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300 rounded-xl text-sm font-semibold transition-all shadow-sm">
               <Mail size={15} /> Email
             </a>
           </div>
@@ -359,9 +359,9 @@ export default function LeadDetails() {
                     onClick={() => handleStatusChange(stg)}
                     className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 ${
                       isCurrent
-                        ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-300 font-bold'
+                        ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300 font-bold'
                         : isPast
-                        ? 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
                         : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
                     }`}
                   >
@@ -392,14 +392,14 @@ export default function LeadDetails() {
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
                 isActive
-                  ? 'border-blue-600 text-blue-600'
+                  ? 'border-emerald-600 text-emerald-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
               <Icon size={16} />
               {tab.label}
               {tab.count !== undefined && (
-                <span className={`px-2 py-0.5 rounded-full text-xs ${isActive ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                <span className={`px-2 py-0.5 rounded-full text-xs ${isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
                   {tab.count}
                 </span>
               )}
